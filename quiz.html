@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Day 7: Cosmic Web Dev Quiz (Enhanced)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background-color: #000010;
+            color: #00ffff;
+            overflow: hidden;
+        }
+        #webgl-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            outline: none;
+            z-index: 0;
+        }
+        .hud-container {
+            position: relative;
+            z-index: 1;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            background: rgba(0, 15, 30, 0.5);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+            animation: fadeIn 1s ease-out;
+        }
+        .text-glow {
+            text-shadow: 0 0 5px #00ffff, 0 0 10px #00ffff;
+        }
+        .answer-btn {
+            background: transparent;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            transition: all 0.2s ease;
+        }
+        .answer-btn:hover:not(:disabled) {
+            background: rgba(0, 255, 255, 0.1);
+            border-color: #00ffff;
+        }
+        .answer-btn.correct {
+            background: rgba(52, 211, 153, 0.2);
+            border-color: #34d399;
+            color: #34d399;
+        }
+        .answer-btn.incorrect {
+            background: rgba(244, 63, 94, 0.2);
+            border-color: #f43f5e;
+            color: #f43f5e;
+        }
+        .answer-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+        .typing-cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.5rem;
+            background-color: #00ffff;
+            animation: blink 1s steps(1) infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <canvas id="webgl-canvas"></canvas>
+    <div class="w-full max-w-3xl mx-auto hud-container rounded-lg p-8">
+        <h1 class="text-3xl font-bold text-center mb-6 text-glow">Cosmic Code Quiz</h1>
+        
+        <div id="quiz-container">
+            <div class="flex justify-between text-sm mb-4 text-cyan-300 border-b border-cyan-500/20 pb-2">
+                <span id="question-counter">System 1 of 10</span>
+                <span id="score-text">Score: 0</span>
+            </div>
+            <p class="text-cyan-400 mb-2">> Incoming Transmission...</p>
+            <h2 id="question-text" class="text-2xl font-semibold mb-6 min-h-[6rem]"></h2>
+            <div id="answer-buttons" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            <div class="flex justify-end mt-6">
+                <button id="next-btn" class="bg-cyan-500 text-slate-900 font-bold px-8 py-3 rounded-md hover:bg-cyan-400 transition hidden">> Warp to Next System</button>
+            </div>
+        </div>
+
+        <div id="score-container" class="hidden text-center">
+            <h2 class="text-4xl font-bold text-glow">Mission Debrief</h2>
+            <p id="final-score" class="text-2xl text-cyan-300 my-4"></p>
+            <p id="final-message" class="text-lg mb-6"></p>
+            <button id="restart-btn" class="bg-cyan-500 text-slate-900 font-bold px-8 py-3 rounded-md hover:bg-cyan-400 transition">> Begin New Mission</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Three.js Starfield ---
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.position.z = 2;
+
+            let starMesh, coloredStarMesh;
+            let starSpeed = { x: 0.0001, y: 0.0002 };
+
+            function createStars() {
+                const starGeometry = new THREE.BufferGeometry();
+                const starCount = 10000;
+                const posArray = new Float32Array(starCount * 3);
+                for (let i = 0; i < starCount * 3; i++) posArray[i] = (Math.random() - 0.5) * 100;
+                starGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+                const starMaterial = new THREE.PointsMaterial({ size: 0.015, color: 0xaaaaff });
+                starMesh = new THREE.Points(starGeometry, starMaterial);
+                scene.add(starMesh);
+
+                const coloredStarGeometry = new THREE.BufferGeometry();
+                const coloredStarCount = 2000;
+                const coloredPosArray = new Float32Array(coloredStarCount * 3);
+                for (let i = 0; i < coloredStarCount * 3; i++) coloredPosArray[i] = (Math.random() - 0.5) * 100;
+                coloredStarGeometry.setAttribute('position', new THREE.BufferAttribute(coloredPosArray, 3));
+                const coloredStarMaterial = new THREE.PointsMaterial({ size: 0.02, color: 0xffaaff });
+                coloredStarMesh = new THREE.Points(coloredStarGeometry, coloredStarMaterial);
+                scene.add(coloredStarMesh);
+            }
+            createStars();
+
+            function animateStars() {
+                starMesh.rotation.x += starSpeed.x;
+                starMesh.rotation.y += starSpeed.y;
+                coloredStarMesh.rotation.x += starSpeed.x * 0.8;
+                coloredStarMesh.rotation.y += starSpeed.y * 0.8;
+                renderer.render(scene, camera);
+                requestAnimationFrame(animateStars);
+            }
+            animateStars();
+
+            function warpSpeed() {
+                const originalSpeed = { ...starSpeed };
+                starSpeed.x *= 50;
+                starSpeed.y *= 50;
+                setTimeout(() => {
+                    starSpeed = originalSpeed;
+                }, 500);
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // --- Quiz Logic ---
+            const allQuestions = [
+                { question: "What does HTML stand for?", answers: [{ text: "Hyper Text Markup Language", correct: true }, { text: "Hyper Trainer Marking Language", correct: false }] },
+                { question: "Which CSS property changes text color?", answers: [{ text: "color", correct: true }, { text: "font-color", correct: false }] },
+                { question: "Which is NOT a JavaScript data type?", answers: [{ text: "Float", correct: true }, { text: "Boolean", correct: false }] },
+                { question: "How do you select an element with id 'demo'?", answers: [{ text: "document.querySelector('#demo')", correct: true }, { text: "document.getElement('demo')", correct: false }] },
+                { question: "What does CSS stand for?", answers: [{ text: "Cascading Style Sheets", correct: true }, { text: "Creative Style Sheets", correct: false }] },
+                { question: "Which tag is used to define an unordered list?", answers: [{ text: "<ul>", correct: true }, { text: "<ol>", correct: false }] },
+                { question: "How can you make a bulleted list with numbers?", answers: [{ text: "<ol>", correct: true }, { text: "<ul>", correct: false }] },
+                { question: "What is the correct place to refer to an external style sheet?", answers: [{ text: "In the <head> section", correct: true }, { text: "In the <body> section", correct: false }] },
+                { question: "How do you write 'Hello World' in an alert box?", answers: [{ text: "alert('Hello World');", correct: true }, { text: "msg('Hello World');", correct: false }] },
+                { question: "Which operator is used to assign a value to a variable?", answers: [{ text: "=", correct: true }, { text: "==", correct: false }] },
+                { question: "What does 'NaN' stand for in JavaScript?", answers: [{ text: "Not a Number", correct: true }, { text: "No Available Number", correct: false }] },
+                { question: "Which property controls the space between elements?", answers: [{ text: "margin", correct: true }, { text: "padding", correct: false }] },
+                { question: "What is the default value of the 'position' property?", answers: [{ text: "static", correct: true }, { text: "relative", correct: false }] },
+                { question: "How do you declare a JavaScript variable?", answers: [{ text: "var, let, or const", correct: true }, { text: "variable", correct: false }] },
+                { question: "Which event occurs when the user clicks on an HTML element?", answers: [{ text: "onclick", correct: true }, { text: "onmouseclick", correct: false }] },
+                { question: "What does the 'flex' in CSS Flexbox stand for?", answers: [{ text: "Flexible", correct: true }, { text: "Flexibility", correct: false }] },
+                { question: "Which method converts a JSON string into a JavaScript object?", answers: [{ text: "JSON.parse()", correct: true }, { text: "JSON.stringify()", correct: false }] },
+                { question: "What is the box model in CSS?", answers: [{ text: "A model for layout and design", correct: true }, { text: "A type of 3D model", correct: false }] },
+                { question: "What is the purpose of the 'alt' attribute in an <img> tag?", answers: [{ text: "To provide alternative text for an image", correct: true }, { text: "To define the image alignment", correct: false }] },
+                { question: "Which of these is a pseudo-class?", answers: [{ text: ":hover", correct: true }, { text: "::before", correct: false }] }
+            ];
+            let currentQuizQuestions = [];
+
+            const questionTextEl = document.getElementById('question-text');
+            const answerButtonsEl = document.getElementById('answer-buttons');
+            const nextBtn = document.getElementById('next-btn');
+            const questionCounterEl = document.getElementById('question-counter');
+            const scoreTextEl = document.getElementById('score-text');
+            
+            const quizContainer = document.getElementById('quiz-container');
+            const scoreContainer = document.getElementById('score-container');
+            const finalScoreEl = document.getElementById('final-score');
+            const finalMessageEl = document.getElementById('final-message');
+            const restartBtn = document.getElementById('restart-btn');
+
+            const correctSynth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.2 } }).toDestination();
+            const incorrectSynth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sawtooth' }, envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.2 } }).toDestination();
+
+            let currentQuestionIndex = 0;
+            let score = 0;
+
+            function typeWriter(element, text, speed = 30) {
+                element.innerHTML = '';
+                let i = 0;
+                const cursor = `<span class="typing-cursor"></span>`;
+                element.innerHTML = cursor;
+                function type() {
+                    if (i < text.length) {
+                        element.innerHTML = text.substring(0, i + 1) + cursor;
+                        i++;
+                        setTimeout(type, speed);
+                    } else {
+                        element.innerHTML = text;
+                    }
+                }
+                type();
+            }
+
+            function startQuiz() {
+                currentQuizQuestions = [...allQuestions].sort(() => 0.5 - Math.random()).slice(0, 10);
+                currentQuestionIndex = 0;
+                score = 0;
+                quizContainer.classList.remove('hidden');
+                scoreContainer.classList.add('hidden');
+                nextBtn.classList.add('hidden');
+                showQuestion();
+            }
+
+            function showQuestion() {
+                resetState();
+                const currentQuestion = currentQuizQuestions[currentQuestionIndex];
+                typeWriter(questionTextEl, currentQuestion.question);
+                
+                questionCounterEl.textContent = `System ${currentQuestionIndex + 1} of ${currentQuizQuestions.length}`;
+                scoreTextEl.textContent = `Score: ${score}`;
+
+                const shuffledAnswers = [...currentQuestion.answers].sort(() => Math.random() - 0.5);
+                shuffledAnswers.forEach(answer => {
+                    const button = document.createElement('button');
+                    button.innerHTML = `> <span>${answer.text}</span>`;
+                    button.classList.add('answer-btn', 'w-full', 'p-4', 'rounded-md', 'text-left', 'transition', 'flex', 'items-center', 'gap-2');
+                    if (answer.correct) button.dataset.correct = answer.correct;
+                    button.addEventListener('click', selectAnswer);
+                    answerButtonsEl.appendChild(button);
+                });
+            }
+
+            function resetState() {
+                nextBtn.classList.add('hidden');
+                while (answerButtonsEl.firstChild) {
+                    answerButtonsEl.removeChild(answerButtonsEl.firstChild);
+                }
+            }
+
+            function selectAnswer(e) {
+                if (Tone.context.state !== 'running') Tone.start();
+                const selectedBtn = e.currentTarget;
+                const isCorrect = selectedBtn.dataset.correct === "true";
+
+                if (isCorrect) {
+                    score++;
+                    scoreTextEl.textContent = `Score: ${score}`;
+                    selectedBtn.classList.add('correct');
+                    correctSynth.triggerAttackRelease('C5', '8n');
+                } else {
+                    selectedBtn.classList.add('incorrect');
+                    incorrectSynth.triggerAttackRelease('A2', '8n');
+                }
+
+                Array.from(answerButtonsEl.children).forEach(button => {
+                    if (button.dataset.correct === "true") button.classList.add('correct');
+                    button.disabled = true;
+                });
+
+                if (currentQuizQuestions.length > currentQuestionIndex + 1) {
+                    nextBtn.classList.remove('hidden');
+                } else {
+                    setTimeout(showScoreScreen, 1500);
+                }
+            }
+
+            function showScoreScreen() {
+                quizContainer.classList.add('hidden');
+                scoreContainer.classList.remove('hidden');
+                finalScoreEl.textContent = `Final Score: ${score} / ${currentQuizQuestions.length}`;
+                let message = "A solid performance, cadet. Ready for the next mission.";
+                if(score === currentQuizQuestions.length) message = "Perfect run, Commander! All systems nominal.";
+                else if (score < currentQuizQuestions.length / 2) message = "Your knowledge needs recalibration. Try again.";
+                finalMessageEl.textContent = message;
+            }
+
+            nextBtn.addEventListener('click', () => {
+                warpSpeed();
+                currentQuestionIndex++;
+                showQuestion();
+            });
+            restartBtn.addEventListener('click', startQuiz);
+
+            startQuiz();
+        });
+    </script>
+</body>
+</html>
